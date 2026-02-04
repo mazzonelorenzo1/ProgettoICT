@@ -1,5 +1,4 @@
 import cv2
-
 from face.detector_dlib import DlibFaceDetector
 from face.align_dlib import DlibAligner5pt
 from face.sphereface_embedder import SphereFaceEmbedder
@@ -9,7 +8,7 @@ from face.pipeline import FacePipeline
 
 def main():
     # 🔹 QUI entra l'immagine
-    img = cv2.imread("data/calib/Lorenzo/Lorenzo_5.jpg")
+    img = cv2.imread("data/unknown/Ragazzo_bianco.jpg")
     if img is None:
         raise RuntimeError("Immagine non letta")
 
@@ -19,8 +18,8 @@ def main():
     db = FaceDB("face_db.pkl")
     verifier = FaceVerifier(
         db,
-        threshold=0.51,
-        margin=0.01,
+        threshold=0.4,
+        margin=0.0,
         mode="topk_mean",  # "best" = massimo su N foto
         default_max_samples=4,
         per_user_max_samples={"Lorenzo": 8}
