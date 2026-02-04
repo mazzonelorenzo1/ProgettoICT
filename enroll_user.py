@@ -15,12 +15,12 @@ verifier = FaceVerifier(db)
 pipeline = FacePipeline(detector, aligner, embedder, verifier, db)
 
 imgs = [
-    cv2.imread("../data/calib/Filippo/Filippo_1.jpg"),
-    cv2.imread("../data/calib/Filippo/Filippo_2.jpg"),
-    cv2.imread("../data/calib/Filippo/Filippo_3.jpg"),
+    cv2.imread("../data/calib/UmaThurman/UmaThurman_1.jpeg"),
+    cv2.imread("../data/calib/UmaThurman/UmaThurman_2.jpg"),
+    cv2.imread("../data/calib/UmaThurman/UmaThurman_3.jpg"),
 ]
 
 imgs = [img for img in imgs if img is not None]
 
-res = pipeline.enroll_user("Filippo", imgs)
+res = pipeline.enroll_user("Uma Thurman", imgs)
 print(res)
