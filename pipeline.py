@@ -1,3 +1,6 @@
+import cv2
+
+
 class FacePipeline:
     def __init__(self, detector, aligner, embedder, verifier, db):
         self.detector = detector
@@ -16,6 +19,7 @@ class FacePipeline:
         rect = rects[best_i]
 
         aligned = self.aligner.align(bgr_img, rect)
+        cv2.imwrite("debug_aligned.jpg", aligned)
         emb = self.embedder.embed(aligned)
         return emb, {"face_score": float(scores[best_i])}
 
@@ -40,17 +44,18 @@ class FacePipeline:
         if emb is None:
             return {"ok": False, "user": None, **meta}
 
-        user, best, second = self.verifier.identify(emb)
+        user, best, second_user, second_score = self.verifier.identify(emb)
 
         return {
             "ok": user is not None,
             "user": user,
             "score": float(best),
-            "second_score": float(second),
+            "second_user": second_user,
+            "second_score": float(second_score),
             "threshold": float(self.verifier.threshold),
-            "margin": float(getattr(self.verifier, "margin", 0.0)),
-            "mode": getattr(self.verifier, "mode", "template"),
-            "topk": int(getattr(self.verifier, "topk", 1)),
+            "margin": float(self.verifier.margin),
+            "mode": self.verifier.mode,
+            "topk": self.verifier.topk,
             **meta
         }
 
