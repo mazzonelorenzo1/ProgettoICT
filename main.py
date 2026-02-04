@@ -5,10 +5,12 @@ from face.sphereface_embedder import SphereFaceEmbedder
 from face.db import FaceDB
 from face.verifier import FaceVerifier
 from face.pipeline import FacePipeline
+from face.TelegramNotify import TelegramNotifier
+
 
 def main():
     # 🔹 QUI entra l'immagine
-    img = cv2.imread("data/unknown/Ragazzo_bianco.jpg")
+    img = cv2.imread("data/unknown/Ragazza_bianca.jpg")
     if img is None:
         raise RuntimeError("Immagine non letta")
 
@@ -25,7 +27,12 @@ def main():
         per_user_max_samples={"Lorenzo": 8}
     )
 
-    pipeline = FacePipeline(detector, aligner, embedder, verifier, db)
+    notifier = TelegramNotifier(
+        token="8555129415:AAF8FOdqbFxlxpLPYFZ0_gFzsxArx2QT_WQ",
+        chat_id="464019501"
+    )
+
+    pipeline = FacePipeline(detector, aligner, embedder, verifier, db, notifier=notifier)
 
     result = pipeline.identify(img)
     print(result)
