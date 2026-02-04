@@ -79,9 +79,9 @@ class FaceVerifier:
         )
         return (score >= self.threshold), float(score)
 
-    def identify(self, emb: np.ndarray) -> Tuple[Optional[str], float, float]:
+    def identify(self, emb: np.ndarray):
         if not self.db.users:
-            return None, -1.0, -1.0
+            return None, -1.0, None, -1.0
 
         scored = []
         for uid, rec in self.db.users.items():
@@ -97,12 +97,25 @@ class FaceVerifier:
                 scored.append((uid, float(s)))
 
         if not scored:
-            return None, -1.0, -1.0
+            return None, -1.0, None, -1.0
 
         scored.sort(key=lambda x: x[1], reverse=True)
+
         best_user, best_score = scored[0]
-        second_score = scored[1][1] if len(scored) > 1 else -1.0
+        if len(scored) > 1:
+            second_user, second_score = scored[1]
+        else:
+            second_user, second_score = None, -1.0
 
         ok = (best_score >= self.threshold) and ((best_score - second_score) >= self.margin)
-        return (best_user if ok else None), float(best_score), float(second_score)
+
+        return (
+            best_user if ok else None,
+            best_score,
+            second_user,
+            second_score
+        )
+
+
+
 
