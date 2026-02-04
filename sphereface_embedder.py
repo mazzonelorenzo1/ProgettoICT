@@ -1,3 +1,5 @@
+# src/face/sphereface_embedder.py
+import torch
 import torch.nn as nn
 import numpy as np
 
