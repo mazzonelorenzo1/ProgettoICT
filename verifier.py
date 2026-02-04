@@ -1,4 +1,3 @@
-# src/face/verifier.py
 import numpy as np
 from typing import Tuple, Optional, List, Dict
 
@@ -115,6 +114,8 @@ class FaceVerifier:
             second_user,
             second_score
         )
+
+
 
 
 
