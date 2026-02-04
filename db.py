@@ -1,3 +1,5 @@
+# src/face/db.py
+from dataclasses import dataclass
 import numpy as np
 import os, pickle
 from typing import Dict, List
