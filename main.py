@@ -1,4 +1,5 @@
 import cv2
+import torch
 from face.detector_dlib import DlibFaceDetector
 from face.align_dlib import DlibAligner5pt
 from face.sphereface_embedder import SphereFaceEmbedder
@@ -10,13 +11,19 @@ from face.TelegramNotify import TelegramNotifier
 
 def main():
     # 🔹 QUI entra l'immagine
-    img = cv2.imread("data/unknown/Ragazza_bianca.jpg")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    if device == "cuda":
+        print("GPU:", torch.cuda.get_device_name(0))
+    else:
+        print("Running on CPU")
+
+    img = cv2.imread("data/Lorenzo_test_3.jpg")
     if img is None:
         raise RuntimeError("Immagine non letta")
 
     detector = DlibFaceDetector()
     aligner = DlibAligner5pt("assets/shape_predictor_5_face_landmarks.dat")
-    embedder = SphereFaceEmbedder("model/sphere20a_20171020.pth")
+    embedder = SphereFaceEmbedder("model/sphere20a_20171020.pth", device = device)
     db = FaceDB("face_db.pkl")
     verifier = FaceVerifier(
         db,
@@ -29,7 +36,7 @@ def main():
 
     notifier = TelegramNotifier(
         token="8555129415:AAF8FOdqbFxlxpLPYFZ0_gFzsxArx2QT_WQ",
-        chat_id="464019501"
+        chat_id="-5105924827"
     )
 
     pipeline = FacePipeline(detector, aligner, embedder, verifier, db, notifier=notifier)
