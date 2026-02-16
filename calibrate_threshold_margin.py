@@ -1,170 +1,174 @@
+import os
 import cv2
 import numpy as np
-from pathlib import Path
-from itertools import product
+import matplotlib.pyplot as plt
+from glob import glob
+from tqdm import tqdm
 
+# Import classes
 from face.detector_dlib import DlibFaceDetector
 from face.align_dlib import DlibAligner5pt
 from face.sphereface_embedder import SphereFaceEmbedder
-from face.db import FaceDB, UserRecord
-from face.verifier import FaceVerifier
-from face.pipeline import FacePipeline
 
-ROOT = Path(__file__).resolve().parent.parent
 
-PRED_PATH = ROOT / "assets" / "shape_predictor_5_face_landmarks.dat"
-MODEL_PATH = ROOT / "model" / "sphere20a_20171020.pth"
+def get_all_embeddings(root_dir, detector, aligner, embedder):
+    """
+    Loads all the images in the directories, computes the embeddings
+    and gives back a list of (embedding, label name).
+    """
+    embeddings = []
+    labels = []
+    paths = []
 
-CALIB_DIR = ROOT / "data" / "calib"
-UNKNOWN_DIR = ROOT / "data" / "unknown"
+    # Searches all the images recursively
+    image_paths = glob(os.path.join(root_dir, "*", "*.jpg")) + \
+                  glob(os.path.join(root_dir, "*", "*.png")) + \
+                  glob(os.path.join(root_dir, "*", "*.jpeg"))
 
-def read_img(p: Path):
-    img = cv2.imread(str(p))
-    if img is None:
-        raise RuntimeError(f"Immagine non letta: {p}")
-    return img
+    print(f"{len(image_paths)} images found. Computation ongoing...")
 
-def build_temp_db(embs_by_user):
-    # FaceDB "fake" in memoria: non salviamo su disco
-    db = FaceDB(db_path=str(ROOT / "data" / "embeddings" / "_temp.pkl"))
-    db.users = {}
-    for user, embs in embs_by_user.items():
-        mat = np.stack(embs, axis=0)
-        template = mat.mean(axis=0)
-        template = template / (np.linalg.norm(template) + 1e-12)
-        db.users[user] = UserRecord(user_id=user, embeddings=embs, template=template)
-    return db
+    for path in tqdm(image_paths):
+        # Extracts the name of the label directory (ex. "Alessandro")
+        label = os.path.basename(os.path.dirname(path))
 
-def main():
-    detector = DlibFaceDetector(upsample=1)
-    aligner = DlibAligner5pt(str(PRED_PATH))
-    embedder = SphereFaceEmbedder(str(MODEL_PATH), device="cpu")
+        img = cv2.imread(path)
+        if img is None: continue
 
-    # 1) carica immagini utenti e calcola embeddings
-    users = [d for d in CALIB_DIR.iterdir() if d.is_dir()]
-    if not users:
-        raise RuntimeError(f"Nessuna cartella utenti in {CALIB_DIR}")
-
-    embs_by_user = {}
-    for ud in users:
-        imgs = sorted([p for p in ud.iterdir() if p.suffix.lower() in [".jpg",".jpeg",".png"]])
-        if len(imgs) < 3:
-            raise RuntimeError(f"Utente {ud.name}: servono almeno 3 immagini, trovate {len(imgs)}")
-
-        embs = []
-        for p in imgs[:3]:
-            img = read_img(p)
-            # estrazione embedding con pipeline minimale (senza verifier/db)
-            rects, scores = detector.detect(img)
-            if len(rects) == 0:
-                raise RuntimeError(f"No face per {p}")
-            best_i = int(np.argmax(np.array(scores)))
-            aligned = aligner.align(img, rects[best_i])
-            emb = embedder.embed(aligned)
-            embs.append(emb)
-        embs_by_user[ud.name] = embs
-
-    # 2) embeddings unknown
-    unknown_imgs = sorted([p for p in UNKNOWN_DIR.iterdir() if p.suffix.lower() in [".jpg",".jpeg",".png"]])
-    if len(unknown_imgs) == 0:
-        raise RuntimeError(f"Nessuna immagine unknown in {UNKNOWN_DIR}")
-
-    unknown_embs = []
-    for p in unknown_imgs:
-        img = read_img(p)
+        # 1. Detect
         rects, scores = detector.detect(img)
         if len(rects) == 0:
+            print(f"⚠️ Nessun volto in: {path}")
             continue
-        best_i = int(np.argmax(np.array(scores)))
-        aligned = aligner.align(img, rects[best_i])
-        unknown_embs.append(embedder.embed(aligned))
 
-    # 3) griglia di ricerca threshold/margin
-    thresholds = np.arange(0.45, 0.86, 0.01)
-    margins = np.arange(0.00, 0.21, 0.01)
+        # Takes the face with the higher score
+        best_i = np.argmax(scores)
+        rect = rects[best_i]
 
-    best = None  # (score, thr, mar, stats)
+        # 2. Align
+        aligned = aligner.align(img, rect)
+        aligned = aligner.align(img, rect)
+        # Saves for debugging
+        cv2.imwrite(f"debug_calib_{label}_{os.path.basename(path)}", aligned)
 
-    # metriche: vogliamo ridurre FPR sugli unknown e mantenere TPR sui genuini
-    # funzione obiettivo semplice: score = 2*TPR - 3*FPR  (pesi modificabili)
-    for thr, mar in product(thresholds, margins):
-        # Leave-One-Out: per ogni user, 3 split (2 enroll, 1 test)
-        tp = 0
-        fn = 0
+        # 3. Embed
+        emb = embedder.embed(aligned)
 
-        # Unknown: false positives
-        fp_unknown = 0
-        tn_unknown = 0
+        embeddings.append(emb)
+        labels.append(label)
+        paths.append(path)
 
-        # costruisci un verifier con questi parametri
-        # NB: mode topk_mean con topk=3 va bene anche con 2 embeddings (fa mean dei disponibili)
-        # Il db cambia ad ogni split, quindi il verifier lo istanziamo dopo.
+    return np.array(embeddings), np.array(labels)
 
-        # genuini
-        for user, embs in embs_by_user.items():
-            for test_i in range(3):
-                enroll_embs = [e for j, e in enumerate(embs) if j != test_i]
-                test_emb = embs[test_i]
 
-                # DB temporaneo con tutti gli utenti: per ciascuno usa 2 embeddings (leave-one-out per user)
-                temp = {}
-                for u2, e2 in embs_by_user.items():
-                    if u2 == user:
-                        temp[u2] = enroll_embs
-                    else:
-                        temp[u2] = e2  # usa tutte le 3 per gli altri (o puoi limitarle a 2)
-                db = build_temp_db(temp)
-                verifier = FaceVerifier(
-                    db,
-                    threshold=float(thr),
-                    margin=float(mar),
-                    mode="max",  # o "topk_mean" se è quello che userai
-                    topk=3,
-                    default_max_samples=4,  # 4 per tutti
-                    per_user_max_samples={"Lorenzo": 8}
-                )
+def evaluate_thresholds(embeddings, labels):
+    """
+    Computes the cosine similarity and finds the best threshold
+    """
+    n = len(embeddings)
+    if n < 2:
+        print("Too few dat to calibrate")
+        return
 
-                pred_user, best_score, second_score = verifier.identify(test_emb)
-                if pred_user == user:
-                    tp += 1
-                else:
-                    fn += 1
+    print(f"Compute the similarity on {n} faces ({n * n} confrontations)...")
 
-        # unknown
-        # qui usiamo un DB “pieno” (tutte e 3 immagini per user)
-        db_full = build_temp_db(embs_by_user)
-        verifier_full = FaceVerifier(
-            db_full,
-            threshold=float(thr),
-            margin=float(mar),
-            mode="topk_mean",
-            topk=3,
-            default_max_samples=4,
-            per_user_max_samples={"Lorenzo": 8}
-        )
+    # Normalize the vectors to length 1 (L2 Norm)
+    norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+    embeddings_norm = embeddings / (norms + 1e-12)
 
-        for ue in unknown_embs:
-            pred_user, best_score, second_score = verifier_full.identify(ue)
-            if pred_user is None:
-                tn_unknown += 1
+    # Cosine similarity
+    sim_matrix = np.dot(embeddings_norm, embeddings_norm.T)
+
+    pos_scores = []  # Same person
+    neg_scores = []  # Different person
+
+    for i in range(n):
+        for j in range(i + 1, n):  # Only upper triangle
+            score = sim_matrix[i, j]
+
+            # Debug strange case: if the score is absurd we truncate it
+            if score > 1.0: score = 1.0
+            if score < -1.0: score = -1.0
+
+            if labels[i] == labels[j]:
+                pos_scores.append(score)
             else:
-                fp_unknown += 1
+                neg_scores.append(score)
 
-        # tassi
-        TPR = tp / (tp + fn + 1e-12)          # riconoscere i veri
-        FPR = fp_unknown / (fp_unknown + tn_unknown + 1e-12)  # riconoscere “unknown” come qualcuno (male)
+    pos_scores = np.array(pos_scores)
+    neg_scores = np.array(neg_scores)
 
-        objective = 2.0 * TPR - 3.0 * FPR
+    print(f"Genuine couples (same person) {len(pos_scores)}")
+    print(f"Impostor couples (different person) {len(neg_scores)}")
 
-        stats = dict(TPR=TPR, FPR=FPR, tp=tp, fn=fn, fp_unknown=fp_unknown, tn_unknown=tn_unknown)
-        if best is None or objective > best[0]:
-            best = (objective, float(thr), float(mar), stats)
+    if len(pos_scores) == 0:
+        print("No same person couples, add more photos")
+        return
 
-    obj, thr_best, mar_best, stats = best
-    print("BEST")
-    print("threshold:", thr_best, "margin:", mar_best)
-    print("stats:", stats)
-    print("objective:", obj)
+    # Research of the best threshold
+    # We search between -1 and 1 (cosine similarity range)
+    thresholds = np.arange(-0.2, 0.8, 0.01)
+    best_acc = 0
+    best_thr = 0
+
+    for thr in thresholds:
+        tp = np.sum(pos_scores >= thr)
+        tn = np.sum(neg_scores < thr)
+        # Balanced accuracy to not favore the ones with a lot of negatives
+        tpr = tp / len(pos_scores) if len(pos_scores) > 0 else 0
+        tnr = tn / len(neg_scores) if len(neg_scores) > 0 else 0
+        acc = (tpr + tnr) / 2  # Balanced Accuracy
+
+        if acc > best_acc:
+            best_acc = acc
+            best_thr = thr
+
+    # Metrics computation
+    mean_pos = np.mean(pos_scores)
+    std_pos = np.std(pos_scores)
+    mean_neg = np.mean(neg_scores)
+    std_neg = np.std(neg_scores)
+
+
+    print("\n" + "=" * 40)
+    print(f"🏆 Calibration results (Cosine Similarity):")
+    print("=" * 40)
+    print(f"Best Threshold: {best_thr:.3f}")
+    print(f"Accuracy (Bal): {best_acc * 100:.2f}%")
+    print("-" * 20)
+    print(f"Average score same person: {mean_pos:.3f} (±{std_pos:.3f})")
+    print(f"Average score different person: {mean_neg:.3f} (±{std_neg:.3f})")
+    print("=" * 40)
+
+    # --- Plot ---
+    plt.figure(figsize=(10, 6))
+    plt.hist(pos_scores, bins=50, alpha=0.6, color='green', label='Stessa Persona', range=(-0.5, 1.0))
+    plt.hist(neg_scores, bins=50, alpha=0.6, color='red', label='Impostori', range=(-0.5, 1.0))
+    plt.axvline(best_thr, color='blue', linestyle='--', label=f'Soglia ({best_thr:.2f})')
+    plt.axvline(mean_pos, color='green', linestyle=':', label='Media Pos')
+    plt.title('Cosine similarity distribution (normalized)')
+    plt.xlabel('Cosine Score')
+    plt.ylabel('Frequency')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.savefig("calibration_plot.png")
+    print("Plot saved as 'calibration_plot.png'")
+
+
+def main():
+    # Components setup
+    print("Models initialization...")
+    detector = DlibFaceDetector()
+    aligner = DlibAligner5pt("../assets/shape_predictor_5_face_landmarks.dat")
+    embedder = SphereFaceEmbedder("../model/sphere20a_20171020.pth")
+    DATA_PATH = "../data/calib"
+
+    if not os.path.exists(DATA_PATH):
+        print(f"Crea una cartella {DATA_PATH} con sottocartelle per persona e foto dentro.")
+        return
+
+    emb, lbl = get_all_embeddings(DATA_PATH, detector, aligner, embedder)
+    evaluate_thresholds(emb, lbl)
+
 
 if __name__ == "__main__":
     main()
