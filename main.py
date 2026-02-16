@@ -10,35 +10,41 @@ from face.TelegramNotify import TelegramNotifier
 
 
 def main():
-    # 🔹 QUI entra l'immagine
+    # Select processing device (GPU if available)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     if device == "cuda":
         print("GPU:", torch.cuda.get_device_name(0))
     else:
         print("Running on CPU")
 
-    img = cv2.imread("data/Lorenzo_test_3.jpg")
+    # Load the input image
+    img = cv2.imread("data/calib/Lorenzo/Lorenzo_7.jpg")
     if img is None:
-        raise RuntimeError("Immagine non letta")
+        raise RuntimeError("Image not read")
 
+    # Initialize pipeline components
     detector = DlibFaceDetector()
     aligner = DlibAligner5pt("assets/shape_predictor_5_face_landmarks.dat")
     embedder = SphereFaceEmbedder("model/sphere20a_20171020.pth", device = device)
     db = FaceDB("face_db.pkl")
+
+    # Configure verifier with validated thresholds
     verifier = FaceVerifier(
         db,
-        threshold=0.4,
-        margin=0.0,
-        mode="topk_mean",  # "best" = massimo su N foto
+        threshold=0.26,
+        margin=0.05,
+        mode="topk_mean",  # Use average of best N matches
         default_max_samples=4,
         per_user_max_samples={"Lorenzo": 8}
     )
 
+    # Setup Telegram bot for notifications
     notifier = TelegramNotifier(
         token="8555129415:AAF8FOdqbFxlxpLPYFZ0_gFzsxArx2QT_WQ",
         chat_id="-5105924827"
     )
 
+    # Assemble and run the full pipeline
     pipeline = FacePipeline(detector, aligner, embedder, verifier, db, notifier=notifier)
 
     result = pipeline.identify(img)
