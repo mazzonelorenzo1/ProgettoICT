@@ -1,9 +1,8 @@
-# src/face/align_dlib.py
 import numpy as np
 import dlib
 import cv2
 
-from sphereface_pytorch.matlab_cp2tform import get_similarity_transform_for_cv2  # come nel notebook
+from sphereface_pytorch.matlab_cp2tform import get_similarity_transform_for_cv2  # as in the notebook
 
 _REF_PTS = np.array([
     [30.2946, 51.6963],
@@ -13,7 +12,7 @@ _REF_PTS = np.array([
     [62.7299, 92.2041]
 ], dtype=np.float32)
 
-_CROP_SIZE = (96, 112)  # (w, h) come warpAffine nel notebook
+_CROP_SIZE = (96, 112)
 
 
 class DlibAligner5pt:
@@ -21,14 +20,11 @@ class DlibAligner5pt:
         self.sp = dlib.shape_predictor(shape_predictor_path)
 
     def _shape_to_3pts(self, shape) -> np.ndarray:
-        # --- CORREZIONE SPECCHIO ---
-        # Invertiamo la logica:
-        # Se prima era specchiata, scambiamo eye_left con eye_right.
 
-        # Punti 0-1: Occhio del soggetto a DX (Sinistra nell'immagine)
-        # Punti 2-3: Occhio del soggetto a SX (Destra nell'immagine)
+        # Points 0-1: Subject's Right Eye (Left in the image)
+        # Points 2-3: Subject's Left Eye (Right in the image)
 
-        # Calcoliamo i centroidi
+        # Calculate centroids
         eye_img_left_x = (shape.part(0).x + shape.part(1).x) / 2.0
         eye_img_left_y = (shape.part(0).y + shape.part(1).y) / 2.0
 
@@ -37,32 +33,31 @@ class DlibAligner5pt:
 
         nose_x, nose_y = shape.part(4).x, shape.part(4).y
 
-        # ORDINE CORRETTO per _REF_PTS standard:
-        # Di solito è [Right_Eye_Img, Left_Eye_Img, Nose] oppure viceversa.
-        # Se era specchiata, proviamo a scambiarli qui sotto:
+        # correct for standard _REF_PTS:
+        # Usually [Right_Eye_Img, Left_Eye_Img, Nose] or vice versa.
+        # If mirrored, try swapping them below:
 
         pts = np.array([
-            [eye_img_right_x, eye_img_right_y],  # Prima coordinata (es. Ref point ~65.0)
-            [eye_img_left_x, eye_img_left_y],  # Seconda coordinata (es. Ref point ~30.0)
+            [eye_img_right_x, eye_img_right_y],  # First coordinate
+            [eye_img_left_x, eye_img_left_y],  # Second coordinate
             [nose_x, nose_y]
         ], dtype=np.float32)
 
         return pts
 
     def align(self, bgr_img, rect) -> np.ndarray:
-        # Convertiamo in RGB per permettere a dlib di trovare i landmark
+        # Convert to RGB to allow dlib to find landmarks
         rgb_input = cv2.cvtColor(bgr_img, cv2.COLOR_BGR2RGB)
 
         shape = self.sp(rgb_input, rect)
 
-        # Usa il metodo _shape_to_3pts corretto che abbiamo scritto prima
+        # Use the correct _shape_to_3pts method defined earlier
         src_pts = self._shape_to_3pts(shape)
 
-        # Calcola trasformazione usando occhi e naso
-        tfm = get_similarity_transform_for_cv2(src_pts, _REF_PTS[:3])
+        # Calculate transformation using eyes and nose
+        tfm = get_similarity_transform_for_cv2(src_pts, _REF_PTS[:3].copy())
 
-        # Restituiamo BGR (Standard OpenCV).
-        # Niente "facce blu" se salvi questa immagine su disco.
+        # Return BGR (Standard OpenCV).
         aligned_bgr = cv2.warpAffine(bgr_img, tfm, _CROP_SIZE)
 
         return aligned_bgr
