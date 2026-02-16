@@ -91,4 +91,17 @@ class FacePipeline:
             return {"ok": False, "error": "no_valid_faces_for_enroll"}
         self.db.upsert_user(user_id, embs)
         return {"ok": True, "user": user_id, "n_samples": len(embs)}
-        return {"ok": True, "user": user_id, "n_samples": len(embs)}
+
+    def delete_user(self, user_id: str):
+        if user_id not in self.db.users:
+            return {"ok": False, "error": "user_not_found", "user": user_id}
+        self.db.delete_user(user_id)
+        return {"ok": True, "deleted_user": user_id, "users": self.db.list_users()}
+    
+    def list_users(self):
+        users = self.db.list_users()
+        return {
+            "ok": True,
+            "n_users": len(users),
+            "users": users
+        }
