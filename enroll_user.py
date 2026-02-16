@@ -6,21 +6,26 @@ from face.db import FaceDB
 from face.verifier import FaceVerifier
 from face.pipeline import FacePipeline
 
+# Initialize individual components
 detector = DlibFaceDetector()
 aligner = DlibAligner5pt("../assets/shape_predictor_5_face_landmarks.dat")
 embedder = SphereFaceEmbedder("../model/sphere20a_20171020.pth")
 db = FaceDB("../face_db.pkl")
 verifier = FaceVerifier(db)
 
+# Assemble the full processing pipeline
 pipeline = FacePipeline(detector, aligner, embedder, verifier, db)
 
+# Load images for enrollment
 imgs = [
-    cv2.imread("../data/calib/UmaThurman/UmaThurman_1.jpeg"),
-    cv2.imread("../data/calib/UmaThurman/UmaThurman_2.jpg"),
-    cv2.imread("../data/calib/UmaThurman/UmaThurman_3.jpg"),
+    cv2.imread("../data/calib/Alessandro/Ale_1.jpg"),
+    cv2.imread("../data/calib/Alessandro/Ale_2.jpg"),
+    cv2.imread("../data/calib/Alessandro/Ale_3.jpg"),
 ]
 
+# Filter out any images that failed to load
 imgs = [img for img in imgs if img is not None]
 
-res = pipeline.enroll_user("Uma Thurman", imgs)
+# Register the user in the database
+res = pipeline.enroll_user("Alessandro", imgs)
 print(res)
