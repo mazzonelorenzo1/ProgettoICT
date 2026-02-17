@@ -1,3 +1,7 @@
+import cv2
+
+
+class FacePipeline:
     def __init__(self, detector, aligner, embedder, verifier, db, notifier=None):
         # Initialize pipeline with all necessary components (Dependency Injection)
         self.detector = detector
