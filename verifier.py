@@ -1,3 +1,93 @@
+import numpy as np
+from typing import Tuple, Optional, List, Dict
+
+
+def cosine_sim(a: np.ndarray, b: np.ndarray) -> float:
+    # Calculate Cosine Similarity with epsilon for numerical stability
+    return float(np.dot(a, b) / ((np.linalg.norm(a) + 1e-12) * (np.linalg.norm(b) + 1e-12)))
+
+
+def _limited_embeddings(rec, max_samples: int) -> List[np.ndarray]:
+    embs = getattr(rec, "embeddings", None)
+    if not embs:
+        return []
+    # Use the last N embeddings (usually the most recently added ones)
+    return [e for e in embs[-max_samples:] if e is not None]
+
+
+def _score_against_user(
+        emb: np.ndarray,
+        rec,
+        mode: str,
+        k: int,
+        max_samples_for_user: int
+) -> float:
+    """
+    mode:
+      - "max": maximum score among samples (best match)
+      - "topk_mean": average of the top-K scores (more stable)
+      - "template": uses only rec.template (centroid)
+    """
+    if mode != "template":
+        embs = _limited_embeddings(rec, max_samples_for_user)
+        if embs:
+            # Calculate similarity against all available samples
+            scores = [cosine_sim(emb, e) for e in embs]
+            scores.sort(reverse=True)
+
+            # Return the single best score
+            if mode == "max":
+                return scores[0]
+
+            # Return average of the top K scores
+            kk = min(k, len(scores))
+            return float(np.mean(scores[:kk]))
+
+    # Fallback or specific mode: use the pre-calculated template/centroid
+    tpl = getattr(rec, "template", None)
+    if tpl is None:
+        return -1.0
+    return cosine_sim(emb, tpl)
+
+
+class FaceVerifier:
+    def __init__(
+            self,
+            face_db,
+            threshold: float = 0.65,
+            margin: float = 0.10,
+            mode: str = "topk_mean",  # "best" corresponds to max logic
+            topk: int = 3,  # Used only if mode="topk_mean"
+            default_max_samples: int = 4,  # Default sample count for everyone
+            per_user_max_samples: Dict[str, int] = None  # Specific overrides, e.g., Lorenzo:8
+    ):
+        self.db = face_db
+        self.threshold = float(threshold)
+        self.margin = float(margin)
+        self.mode = mode
+        self.topk = int(topk)
+        self.default_max_samples = int(default_max_samples)
+        self.per_user_max_samples = per_user_max_samples or {}
+
+    def _max_samples(self, user_id: str) -> int:
+        # Retrieve user-specific sample limit or fallback to default
+        return int(self.per_user_max_samples.get(user_id, self.default_max_samples))
+
+    def verify_claim(self, emb: np.ndarray, claimed_user_id: str) -> Tuple[bool, float]:
+        # 1:1 Verification - Check if embedding matches a specific user ID
+        rec = self.db.users.get(claimed_user_id)
+        if rec is None:
+            return False, -1.0
+
+        score = _score_against_user(
+            emb, rec,
+            mode=self.mode,
+            k=self.topk,
+            max_samples_for_user=self._max_samples(claimed_user_id)
+        )
+        return (score >= self.threshold), float(score)
+
+    def identify(self, emb: np.ndarray):
         # 1:N Identification - Compare embedding against ALL users
         if not self.db.users:
             return None, -1.0, None, -1.0
