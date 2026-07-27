@@ -26,6 +26,8 @@ Developed with privacy and edge-readiness in mind, the system operates entirely 
 *   **Web Deployment:** Lightweight Flask-based web application providing a user-friendly interface for continuous monitoring and new user enrollment.
 *   **Secure Remote Access:** Uses `ngrok` to establish a secure HTTPS tunnel to the local server, allowing remote monitoring without exposing the local network.
 
+For more in depth informations about this project, please refer to [this presentation](https://github.com/mazzonelorenzo1/Smart-Peephole/blob/main/Project_presentation.pdf).
+
 ---
 
 <a id="architecture"></a>
