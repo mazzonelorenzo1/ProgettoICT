@@ -8,11 +8,9 @@
 ## 📑 Table of Contents
 - [About the Project](#intro)
 - [System Architecture & Logic](#architecture)
-- [Repository Structure](#struct)
 - [Installation](#install)
 - [How to Run the System](#demo)
 - [Performance & Benchmarks](#results)
-- [Future Directions](#future)
 - [Acknowledgments](#aknow)
 
 ---
@@ -39,29 +37,6 @@ The recognition pipeline is decoupled into discrete stages to maximize performan
 2.  **Feature Extraction:** A **SphereFace** neural network processes the aligned faces to extract high-dimensional, discriminative facial embeddings.
 3.  **Identification & Thresholding:** The extracted embedding is compared against all locally stored user embeddings using a distance-based metric. If the similarity score exceeds a strict decision threshold, the identity is confirmed; otherwise, the subject is classified as *Unknown*.
 4.  **Enrollment:** New users can be registered dynamically via the Web UI by capturing at least 4 photos to guarantee robustness against varying poses, illuminations, and facial expressions.
-
----
-
-<a id="struct"></a>
-## 📂 Repository Structure
-*(Inferred logical structure based on Flask orchestration and pipeline)*
-
-```text
-📁 Smart-Peephole/
-│
-├── 📁 app/                        
-│   ├── app.py                      # Flask orchestration, routing, and REST APIs (/identify, /enroll)
-│   ├── face_pipeline.py            # Dlib detection, alignment, and SphereFace embedding logic
-│   └── telegram_utils.py           # Telegram bot integration for unknown user alerts
-│
-├── 📁 database/                    # Local storage directory for enrolled user data
-│
-├── 📁 templates/                   # Streamlined HTML interfaces for live camera and enrollment
-│
-├── 🧠 models/                      # Contains the pre-trained SphereFace weights and Dlib shape predictors
-│
-└── ⚙️ requirements.txt             # Python dependencies
-```
 
 ---
 
@@ -121,15 +96,6 @@ The system was rigorously benchmarked across consumer CPUs and GPUs to ensure ed
 *   **Benchmark 2 (SphereFace Forward Pass):** Isolating the neural network inference.
     *   The RTX 5070 GPU achieved a **4-5x speedup** compared to CPUs, dropping average latency to ~1-2 ms per embedding with high stability (low p50-p95 dispersion).
 *   **Conclusion:** The pipeline is highly scalable and completely functional on CPU-only machines, perfect for single-image domestic authentication.
-
----
-
-<a id="future"></a>
-## 🔮 Future Directions
-*   **Enhanced Ethical Transparency:** Implementing a dedicated UI for user consent management to ensure full GDPR compliance.
-*   **Multi-Face Identification:** Processing multiple detection regions in parallel to recognize groups of people simultaneously.
-*   **Image Quality Assessment (IQA):** Pre-filtering blurred or low-light frames automatically.
-*   **IoT Deployment:** Optimizing the model for 24/7 battery-efficient usage on edge and IoT devices.
 
 ---
 
